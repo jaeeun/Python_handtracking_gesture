@@ -42,7 +42,7 @@ landmark_3dpoint = []
 cam_width=0
 cam_height=0
 
-keypoint_android_classifier = KeyPointAncroidClassifier()
+keypoint_android_classifier = KeyPointAndroidClassifier()
 
 with open('model/keypoint_android_classifier/keypoint_android_classifier_label.csv',
             encoding='utf-8-sig') as f:
@@ -91,31 +91,78 @@ def on_message(client, userdata, msg):
         landmark_point=[]
         landmark_3dpoint = []
         
-        for i in range(0, 21):
-            landmark_x = float(arr[i*3])
-            landmark_y = float(arr[i*3 + 1]) * cam_width
-            landmark_z = float(arr[i*3 + 2]) * cam_height
+        if arr[0] == '1':
+            print("~~~~~~~~~~~    1 hand")
+            for i in range(0, 21):
+                landmark_x = float(arr[i*3 + 1])
+                landmark_y = float(arr[i*3 + 2]) * cam_width
+                landmark_z = float(arr[i*3 + 3]) * cam_height
 
-            landmark_point.append([landmark_x, landmark_y])
-            landmark_3dpoint.append([landmark_x, landmark_y, landmark_z])
+                landmark_point.append([landmark_x, landmark_y])
+                landmark_3dpoint.append([landmark_x, landmark_y, landmark_z])
+                
+            # print(landmark_point)
+            l1 = True
+            st1=""
+            for a in arr:
+                if l1: l1 = False
+                else:
+                    st1 += a + ','
             
-        # print(landmark_point)
-        
-        # finger_elements["hand"] = handedness.classification[0].label[0:]
-        finger_elements["landmark"] = st
-        
-        fbb = flexbuffers.Builder()
-        fbb.MapFromElements(finger_elements)
-        data = fbb.Finish()
-        client.publish("/finger",data,1)
-        
-        pre_processed_landmark_list = pre_process_landmark(landmark_point)
-        
-        # sign 분류
-        hand_sign_id = keypoint_android_classifier(pre_processed_landmark_list)
-        
-        print("/android_hand   ,  " + keypoint_android_classifier_labels[hand_sign_id])
-    
+            finger_elements["landmark"] = st1
+            finger_elements["hand"] = "Right"
+            fbb = flexbuffers.Builder()
+            fbb.MapFromElements(finger_elements)
+            data = fbb.Finish()
+            client.publish("/finger",data,1)
+            
+            pre_processed_landmark_list = pre_process_landmark(landmark_point)
+            
+            # sign 분류
+            hand_sign_id = keypoint_android_classifier(pre_processed_landmark_list)
+            
+            print("/android_hand   ,  " + keypoint_android_classifier_labels[hand_sign_id])
+            
+        elif arr[0]== '2':
+            print("~~~~~~~~~~~    2 hands")
+            for i in range(0, 42):
+                landmark_x = float(arr[i*3 + 1])
+                landmark_y = float(arr[i*3 + 2]) * cam_width
+                landmark_z = float(arr[i*3 + 3]) * cam_height
+
+                # landmark_point.append([landmark_x, landmark_y])
+                # landmark_3dpoint.append([landmark_x, landmark_y, landmark_z])
+            l = 0
+            st1=""
+            st2=""
+            for a in arr:
+                if l>0:
+                    if l<=21:
+                        st1 = a + ','
+                    else:
+                        st2 += a + ','
+                l+=1
+                
+            finger_elements["landmark"] = st1
+            if float(arr[1])>float(arr[22]):
+                finger_elements["hand"] = "Right"
+            else:
+                finger_elements["hand"] = "Left"
+            fbb = flexbuffers.Builder()
+            fbb.MapFromElements(finger_elements)
+            data = fbb.Finish()
+            client.publish("/finger",data,1)
+            
+            finger_elements["landmark"] = st2
+            if float(arr[22])>float(arr[1]):
+                finger_elements["hand"] = "Right"
+            else:
+                finger_elements["hand"] = "Left"
+            fbb = flexbuffers.Builder()
+            fbb.MapFromElements(finger_elements)
+            data = fbb.Finish()
+            client.publish("/finger",data,1)
+
 
 def get_args():
     parser = argparse.ArgumentParser()
