@@ -20,6 +20,18 @@ from collections import deque
 from math import*
 from utils import CvFpsCalc
 from model import KeyPointAndroidClassifier
+from model import KeyPointAndroid2handsClassifier
+
+arg_mode = 0
+arg_number = 0
+
+cam_width=700
+cam_height=500
+
+count = 0
+cross = 0
+cross_pre = 0
+pre_time = datetime.datetime.now()
 
 
 info_elements = {
@@ -36,19 +48,23 @@ gesture_elements = {
     "param2" : "0",
     "param3" : "0"
 }
-landmark_point = []
-landmark_3dpoint = []
-
-cam_width=0
-cam_height=0
 
 keypoint_android_classifier = KeyPointAndroidClassifier()
+keypoint_android_2hands_classifier = KeyPointAndroid2handsClassifier()
 
+# 제스쳐 이름 라벨 ###########################################################
 with open('model/keypoint_android_classifier/keypoint_android_classifier_label.csv',
             encoding='utf-8-sig') as f:
     keypoint_android_classifier_labels = csv.reader(f)
     keypoint_android_classifier_labels = [
         row[0] for row in keypoint_android_classifier_labels
+    ]
+
+with open('model/keypoint_android_classifier/keypoint_android_2hands_classifier_label.csv',
+            encoding='utf-8-sig') as f:
+    keypoint_android_2hands_classifier_labels = csv.reader(f)
+    keypoint_android_2hands_classifier_labels = [
+        row[0] for row in keypoint_android_2hands_classifier_labels
     ]
 
 def on_connect(client, userdata, flags, rc):
@@ -66,13 +82,91 @@ def on_publish(client, userdata, mid):
     blank=0
     # print('In on_pub callback mid = ',mid)
 
+
+def calc_landmark_list(image, landmarks):
+    image_width, image_height = image.shape[1], image.shape[0]
+
+    landmark_point = []
+    landmark_3dpoint = []
+
+    # 키 포인트
+    for _, landmark in enumerate(landmarks.landmark):
+        landmark_x = min(int(landmark.x * image_width), image_width - 1)
+        landmark_y = min(int(landmark.y * image_height), image_height - 1)
+        landmark_z = landmark.z * image_height
+
+        landmark_point.append([landmark_x, landmark_y])
+        landmark_3dpoint.append([landmark_x, landmark_y, landmark_z])
+
+    return landmark_point,landmark_3dpoint
+
+def calc_landmark_front(arr):
+    for i in range(0, 21):
+        x = float(arr[i*3 + 1])
+        y = float(arr[i*3 + 2])
+        z = float(arr[i*3 + 3])
+    return x,y,z
+
+def calc_landmark_back(arr):
+    for i in range(21, 42):
+        x = float(arr[i*3 + 1])
+        y = float(arr[i*3 + 2])
+        z = float(arr[i*3 + 3])
+    return x,y,z
+
+def pre_process_landmark(landmark_list):
+    temp_landmark_list = copy.deepcopy(landmark_list)
+
+    # 상대 좌표로 변환
+    base_x, base_y = 0, 0
+    for index, landmark_point in enumerate(temp_landmark_list):
+        if index == 0:
+            base_x, base_y = landmark_point[0], landmark_point[1]
+
+        temp_landmark_list[index][0] = temp_landmark_list[index][0] - base_x
+        temp_landmark_list[index][1] = temp_landmark_list[index][1] - base_y
+
+    # 1次元リストに変換
+    temp_landmark_list = list(
+        itertools.chain.from_iterable(temp_landmark_list))
+
+    # 正規化
+    max_value = max(list(map(abs, temp_landmark_list)))
+
+    def normalize_(n):
+        return n / max_value
+
+    temp_landmark_list = list(map(normalize_, temp_landmark_list))
+
+    return temp_landmark_list
+
+
+def logging_csv(number, landmark_list, csv_path):
+    with open(csv_path, 'a', newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([number, *landmark_list])
+    return
+
+def dotproduct(v1, v2):
+  return sum((a*b) for a, b in zip(v1, v2))
+
+def length(v):
+  return math.sqrt(dotproduct(v, v))
+
+def angle(v1, v2):
+  return math.acos(dotproduct(v1, v2) / (length(v1) * length(v2)))
+
+
 def on_message(client, userdata, msg):
     # data = flexbuffers.GetRoot(msg.payload).AsString
     
     st = str(msg.payload.decode("utf-8"))
     arr = st.split(',')
+    # print("-----    "+st)
     
+    global arg_mode, arg_number
     global cam_width, cam_height
+    global count
     
     if msg.topic == "/android_info":
         info_elements["screensize"] = st
@@ -88,93 +182,148 @@ def on_message(client, userdata, msg):
         print("/android_info  ,  screensize : "+str(arr))
         
     elif msg.topic == "/android_hand":
-        landmark_point=[]
-        landmark_3dpoint = []
+        landmark_2d_1hand = []
+        landmark_3d_1hand = []
+        landmark_2d_2hand = []
+        landmark_3d_2hand = []
+        
+        is_two_hand = False
+        first_is_right = True
         
         if arr[0] == '1':
             print("~~~~~~~~~~~    1 hand")
             for i in range(0, 21):
-                landmark_x = float(arr[i*3 + 1])
-                landmark_y = float(arr[i*3 + 2]) * cam_width
+                landmark_x = float(arr[i*3 + 1]) * cam_width
+                landmark_y = float(arr[i*3 + 2]) * cam_height
                 landmark_z = float(arr[i*3 + 3]) * cam_height
 
-                landmark_point.append([landmark_x, landmark_y])
-                landmark_3dpoint.append([landmark_x, landmark_y, landmark_z])
-                
-            # print(landmark_point)
-            l1 = True
-            st1=""
-            for a in arr:
-                if l1: l1 = False
-                else:
-                    st1 += a + ','
-            
-            finger_elements["landmark"] = st1
-            finger_elements["hand"] = "Right"
-            fbb = flexbuffers.Builder()
-            fbb.MapFromElements(finger_elements)
-            data = fbb.Finish()
-            client.publish("/finger",data,1)
-            
-            pre_processed_landmark_list = pre_process_landmark(landmark_point)
-            
-            # sign 분류
-            hand_sign_id = keypoint_android_classifier(pre_processed_landmark_list)
-            
-            print("/android_hand   ,  " + keypoint_android_classifier_labels[hand_sign_id])
-            
-        elif arr[0]== '2':
+                landmark_2d_1hand.append([landmark_x, landmark_y])
+                landmark_3d_1hand.append([landmark_x, landmark_y, landmark_z])
+        
+        elif arr[0]== '2' or arr[0]=='3':
             print("~~~~~~~~~~~    2 hands")
-            for i in range(0, 42):
-                landmark_x = float(arr[i*3 + 1])
-                landmark_y = float(arr[i*3 + 2]) * cam_width
-                landmark_z = float(arr[i*3 + 3]) * cam_height
-
-                # landmark_point.append([landmark_x, landmark_y])
-                # landmark_3dpoint.append([landmark_x, landmark_y, landmark_z])
-            l = 0
-            st1=""
-            st2=""
-            for a in arr:
-                if l>0:
-                    if l<=21:
-                        st1 = a + ','
-                    else:
-                        st2 += a + ','
-                l+=1
-                
-            finger_elements["landmark"] = st1
-            if float(arr[1])>float(arr[22]):
-                finger_elements["hand"] = "Right"
-            else:
-                finger_elements["hand"] = "Left"
-            fbb = flexbuffers.Builder()
-            fbb.MapFromElements(finger_elements)
-            data = fbb.Finish()
-            client.publish("/finger",data,1)
             
-            finger_elements["landmark"] = st2
-            if float(arr[22])>float(arr[1]):
-                finger_elements["hand"] = "Right"
+            is_two_hand = True
+            
+            if float(arr[1])>float(arr[64]):
+                first_is_right = True
             else:
-                finger_elements["hand"] = "Left"
-            fbb = flexbuffers.Builder()
-            fbb.MapFromElements(finger_elements)
-            data = fbb.Finish()
-            client.publish("/finger",data,1)
+                first_is_right = False
+            
+            if first_is_right:
+                for i in range(0, 21):
+                    landmark_x = float(arr[i*3 + 1]) * cam_width
+                    landmark_y = float(arr[i*3 + 2]) * cam_height
+                    landmark_z = float(arr[i*3 + 3]) * cam_height
+                
+                    landmark_2d_1hand.append([landmark_x, landmark_y])
+                    landmark_3d_1hand.append([landmark_x, landmark_y, landmark_z])
+                    landmark_2d_2hand.append([landmark_x, landmark_y])
+                    landmark_3d_2hand.append([landmark_x, landmark_y, landmark_z])
+                
+                for i in range(21, 42):
+                    landmark_x = float(arr[i*3 + 1]) * cam_width
+                    landmark_y = float(arr[i*3 + 2]) * cam_height
+                    landmark_z = float(arr[i*3 + 3]) * cam_height
+                    
+                    landmark_2d_2hand.append([landmark_x, landmark_y])
+                    landmark_3d_2hand.append([landmark_x, landmark_y, landmark_z])
+            else:
+                for i in range(21, 42):
+                    landmark_x = float(arr[i*3 + 1]) * cam_width
+                    landmark_y = float(arr[i*3 + 2]) * cam_height
+                    landmark_z = float(arr[i*3 + 3]) * cam_height
+                
+                    landmark_2d_1hand.append([landmark_x, landmark_y])
+                    landmark_3d_1hand.append([landmark_x, landmark_y, landmark_z])
+                    landmark_2d_2hand.append([landmark_x, landmark_y])
+                    landmark_3d_2hand.append([landmark_x, landmark_y, landmark_z])
+                
+                for i in range(0, 21):
+                    landmark_x = float(arr[i*3 + 1]) * cam_width
+                    landmark_y = float(arr[i*3 + 2]) * cam_height
+                    landmark_z = float(arr[i*3 + 3]) * cam_height
+                    
+                    landmark_2d_2hand.append([landmark_x, landmark_y])
+                    landmark_3d_2hand.append([landmark_x, landmark_y, landmark_z])
+        else:
+            print("hand error : "+arr[0])
+
+        # finger data 만들기
+        l = 0
+        st1=""
+        st2=""
+        for a in arr:
+            if l>0:
+                if l<=21*3:
+                    st1 += a + ','
+                else:
+                    st2 += a + ','
+            l+=1
+        
+        if arr[0]== '2' and not first_is_right:
+            temp = st1
+            st1 = st2
+            st2 = temp
+            # print("  --  swap  --  ")
+        
+        # print("----->    "+st1)
+        
+        ########################## finger 정보 보내기 ##########################
+        finger_elements["hand"] = "Right"
+        finger_elements["landmark"] = st1
+        
+        fbb = flexbuffers.Builder()
+        fbb.MapFromElements(finger_elements)
+        data = fbb.Finish()
+        client.publish("/finger",data,1)
+        
+        finger_elements["hand"] = "Left"
+        finger_elements["landmark"] = st2
+        fbb = flexbuffers.Builder()
+        fbb.MapFromElements(finger_elements)
+        data = fbb.Finish()
+        client.publish("/finger",data,1)
+        
+        ##########################    Gesture 인식   ##########################
+        pre_processed_landmark_1hand = pre_process_landmark(landmark_2d_1hand)
+        if is_two_hand:
+            pre_processed_landmark_2hand = pre_process_landmark(landmark_2d_2hand)
+                
+        # if arg_mode == 1:
+        #     logging_csv(arg_number, pre_processed_landmark_1hand,'model/keypoint_android_classifier/keypoint_android_data.csv')
+        #     print('{}\r'.format(count), end='')
+        #     count+=1
+        #     if count>2000: quit()
+            
+        # elif arg_mode == 2 & is_two_hand:
+        #     logging_csv(arg_number, pre_processed_landmark_2hand,'model/keypoint_android_classifier/keypoint_android_2hands_data.csv')
+        #     print('{}\r'.format(count), end='')
+        #     count+=1
+        #     if count>2000: quit()
+        
+        elif arg_mode == 0:
+            hand_sign_1hand = keypoint_android_classifier(pre_processed_landmark_1hand)
+            print("/android_hand  hand_sign_1hand : "+str(hand_sign_1hand))
+            # print("/android_hand  1hand,  " + keypoint_android_classifier_labels[hand_sign_1hand])
+            # if is_two_hand:
+            #     hand_sign_2hand = keypoint_android_2hands_classifier(pre_processed_landmark_2hand)
+            #     print("/android_hand   2hands,  " + keypoint_android_classifier_labels[hand_sign_2hand])
 
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", help='0:recognize, 1:save right, 2:save left, 3: save both', type=int, default=0)
+    parser.add_argument("--mode", help='0:recognize, 1:save 1 hand, 2: save 2 hands', type=int, default=0)
     parser.add_argument("--number", help='to save gesture number', type=int, default=0)
 
     args = parser.parse_args()
 
     return args
 
-
 def main():
+    global arg_mode
+    global arg_number
+    
     args = get_args()
     
     arg_mode = args.mode
@@ -187,40 +336,10 @@ def main():
     client.on_message = on_message
     client.connect('13.124.29.179', 1883)
     client.loop_forever()
-    
-    use_brect = True
-
-    info_count=0
-
-
-    
-
-    # ラベル読み込み ###########################################################
-    with open('model/keypoint_classifier/keypoint_classifier_label.csv',
-              encoding='utf-8-sig') as f:
-        keypoint_classifier_labels = csv.reader(f)
-        keypoint_classifier_labels = [
-            row[0] for row in keypoint_classifier_labels
-        ]
-
-
-    # FPS計測モジュール ########################################################
-    cvFpsCalc = CvFpsCalc(buffer_len=10)
-
-    # 座標履歴 #################################################################
-    history_length = 16
-    point_history = deque(maxlen=history_length)
-
-    # フィンガージェスチャー履歴 ################################################
-    finger_gesture_history = deque(maxlen=history_length)
 
     #  ########################################################################
-    mode = 0
-    cross = 0
-    cross_pre = 0
     pre_time = datetime.datetime.now()
     last_point_gun = [0,0,0]
-
 
 
         #  ####################################################################
@@ -366,69 +485,6 @@ def main():
     #                 else:
     #                     last_point_gun = landmark_list[8]
 
-
-def calc_landmark_list(image, landmarks):
-    image_width, image_height = image.shape[1], image.shape[0]
-
-    landmark_point = []
-    landmark_3dpoint = []
-
-    # 키 포인트
-    for _, landmark in enumerate(landmarks.landmark):
-        landmark_x = min(int(landmark.x * image_width), image_width - 1)
-        landmark_y = min(int(landmark.y * image_height), image_height - 1)
-        landmark_z = landmark.z * image_height
-
-        landmark_point.append([landmark_x, landmark_y])
-        landmark_3dpoint.append([landmark_x, landmark_y, landmark_z])
-
-    return landmark_point,landmark_3dpoint
-
-
-def pre_process_landmark(landmark_list):
-    temp_landmark_list = copy.deepcopy(landmark_list)
-
-    # 상대 좌표로 변환
-    base_x, base_y = 0, 0
-    for index, landmark_point in enumerate(temp_landmark_list):
-        if index == 0:
-            base_x, base_y = landmark_point[0], landmark_point[1]
-
-        temp_landmark_list[index][0] = temp_landmark_list[index][0] - base_x
-        temp_landmark_list[index][1] = temp_landmark_list[index][1] - base_y
-
-    # 1次元リストに変換
-    temp_landmark_list = list(
-        itertools.chain.from_iterable(temp_landmark_list))
-
-    # 正規化
-    max_value = max(list(map(abs, temp_landmark_list)))
-
-    def normalize_(n):
-        return n / max_value
-
-    temp_landmark_list = list(map(normalize_, temp_landmark_list))
-
-    return temp_landmark_list
-
-def logging_csv(number, mode, landmark_list, point_history_list):
-    if mode == 0:
-        pass
-    if mode == 1 and (0 <= number <= 11):
-        csv_path = 'model/keypoint_classifier/keypoint.csv'
-        with open(csv_path, 'a', newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow([number, *landmark_list])
-    return
-
-def dotproduct(v1, v2):
-  return sum((a*b) for a, b in zip(v1, v2))
-
-def length(v):
-  return math.sqrt(dotproduct(v, v))
-
-def angle(v1, v2):
-  return math.acos(dotproduct(v1, v2) / (length(v1) * length(v2)))
 
 if __name__ == '__main__':
     main()

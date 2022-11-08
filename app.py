@@ -10,7 +10,7 @@ import mediapipe as mp
 import datetime
 import math
 
-from pyrsistent import v
+# from pyrsistent import v
 import flexbuffers
 import paho.mqtt.client as mqtt
 

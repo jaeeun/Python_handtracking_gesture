@@ -3,10 +3,14 @@ import csv
 import numpy as np
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix, classification_report
 
 RANDOM_SEED = 42
 
-dataset = 'model/keypoint_android_classifier/keypoint_android.csv'
+dataset = 'model/keypoint_android_classifier/keypoint_android_data.csv'
 model_save_path = 'model/keypoint_android_classifier/keypoint_android_classifier.hdf5'
 tflite_save_path = 'model/keypoint_android_classifier/keypoint_android_classifier.tflite'
 
@@ -60,10 +64,7 @@ predict_result = model.predict(np.array([X_test[0]]))
 print(np.squeeze(predict_result))
 print(np.argmax(np.squeeze(predict_result)))
 
-import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix, classification_report
+
 
 def print_confusion_matrix(y_true, y_pred, report=True):
     labels = sorted(list(set(y_true)))
