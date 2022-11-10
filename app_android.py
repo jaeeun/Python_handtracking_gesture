@@ -290,26 +290,33 @@ def on_message(client, userdata, msg):
         if is_two_hand:
             pre_processed_landmark_2hand = pre_process_landmark(landmark_2d_2hand)
                 
-        # if arg_mode == 1:
-        #     logging_csv(arg_number, pre_processed_landmark_1hand,'model/keypoint_android_classifier/keypoint_android_data.csv')
-        #     print('{}\r'.format(count), end='')
-        #     count+=1
-        #     if count>2000: quit()
+        if arg_mode == 1:
+            logging_csv(arg_number, pre_processed_landmark_1hand,'model/keypoint_android_classifier/keypoint_android_data.csv')
+            print('{}\r'.format(count), end='')
+            count+=1
+            if count>2000: quit()
             
-        # elif arg_mode == 2 & is_two_hand:
-        #     logging_csv(arg_number, pre_processed_landmark_2hand,'model/keypoint_android_classifier/keypoint_android_2hands_data.csv')
-        #     print('{}\r'.format(count), end='')
-        #     count+=1
-        #     if count>2000: quit()
+        elif arg_mode == 2 and is_two_hand:
+            logging_csv(arg_number, pre_processed_landmark_2hand,'model/keypoint_android_classifier/keypoint_android_2hands_data.csv')
+            print('{}\r'.format(count), end='')
+            count+=1
+            if count>2000: quit()
         
         elif arg_mode == 0:
             hand_sign_1hand = keypoint_android_classifier(pre_processed_landmark_1hand)
-            print("/android_hand  hand_sign_1hand : "+str(hand_sign_1hand))
-            # print("/android_hand  1hand,  " + keypoint_android_classifier_labels[hand_sign_1hand])
+            # print("/android_hand  hand_sign_1hand : "+str(hand_sign_1hand))
+            print("/android_hand  1hand,  " + keypoint_android_classifier_labels[hand_sign_1hand])
             # if is_two_hand:
             #     hand_sign_2hand = keypoint_android_2hands_classifier(pre_processed_landmark_2hand)
             #     print("/android_hand   2hands,  " + keypoint_android_classifier_labels[hand_sign_2hand])
 
+            gesture_elements["gesture"] = keypoint_android_classifier_labels[hand_sign_1hand]
+            
+            fbb = flexbuffers.Builder()
+            fbb.MapFromElements(gesture_elements)
+            data = fbb.Finish()
+            client.publish("/gesture",data,1)  
+            
 
 def get_args():
     parser = argparse.ArgumentParser()
