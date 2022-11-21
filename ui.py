@@ -3,6 +3,7 @@ import csv
 import copy
 import argparse
 import itertools
+import math
 
 import PySimpleGUI as sg
 import cv2 as cv
@@ -48,10 +49,10 @@ def main():
             [sg.Graph(canvas_size=(400, 400), graph_bottom_left=(0,0), graph_top_right=(400, 400), background_color='gray', key='graph'),sg.Slider(range=(0, 100), size=(20, 20), enable_events=True, orientation='v', key='-SLIDER_V-')],      
             [sg.Slider(range=(0, 100), size=(50, 10), enable_events=True, orientation='h', key='-SLIDER_H-')],
             [sg.T('Test Buttons:'), sg.Button('Clock'), sg.Button('Move')],
-            [sg.Radio(text="1 - Volume", group_id=1, size=(30, 10), key='-RADIO1-')],
-            [sg.Radio(text="2 - Slider Vertical", group_id=1, size=(30, 10), key='-RADIO2-')],
-            [sg.Radio(text="3 - Slider Horizontal", group_id=1, size=(30, 10), key='-RADIO3-')],
-            [sg.Radio(text="4 - Move", group_id=1, size=(30, 10), key='-RADIO4-')],
+            [sg.Radio(text="1 - Move", group_id=1, size=(30, 10), key='-RADIO1-')],
+            [sg.Radio(text="2 - Volume", group_id=1, size=(30, 10), key='-RADIO2-')],
+            [sg.Radio(text="3 - Slider Vertical", group_id=1, size=(30, 10), key='-RADIO3-')],
+            [sg.Radio(text="4 - Slider Horizontal", group_id=1, size=(30, 10), key='-RADIO4-')],
             [sg.Push(), sg.Button('Exit', font='Helvetica 14')]
     ]
 
@@ -78,6 +79,12 @@ def main():
     slider_h = window['-SLIDER_H-']
     slider_v.update(50)
     slider_h.update(50)
+    radio1 = window['-RADIO1-']
+    radio2 = window['-RADIO2-']
+    radio3 = window['-RADIO3-']
+    radio4 = window['-RADIO4-']
+    radio1.update(True)
+    curRadio = 1
 
     svV = 200
     svH = 200
@@ -126,9 +133,6 @@ def main():
         # slider_v.update(cur_frame)
         # cur_frame += 1
 
-        
-        
-
 
         image = cv.flip(image, 1)  # ミラー表示
         debug_image = copy.deepcopy(image)
@@ -149,11 +153,9 @@ def main():
                 brect = calc_bounding_rect(debug_image, hand_landmarks)
                 # 랜드마크
                 landmark_list, landmark_3Dlist = calc_landmark_list(debug_image, hand_landmarks)
-
                 pre_processed_landmark_list = pre_process_landmark(landmark_list)
                 # sign 분류
                 hand_sign_id = keypoint_classifier(pre_processed_landmark_list)
-
                 
                 debug_image = draw_info_text(
                             debug_image,
@@ -161,6 +163,72 @@ def main():
                             handedness,
                             keypoint_classifier_labels[hand_sign_id],
                         )
+                
+                v0 = [1,0]
+                v1 = [landmark_list[6][0]-landmark_list[5][0],landmark_list[6][1]-landmark_list[5][1]]
+                v2 = [landmark_list[10][0]-landmark_list[9][0],landmark_list[10][1]-landmark_list[9][1]]
+                
+                a1 = angle(v0,v1)
+                a2 = angle(v0,v2)
+                
+                a1=math.degrees(a1)-90
+                a2=math.degrees(a2)-90
+                aa = (a1+a2)/2
+
+                print(a2)
+                # print(aa)
+                # if abs(aa)<15:
+                    
+                # elif aa<0:
+                    
+                # else:
+
+                # 1,2,3,4 표시
+                if keypoint_classifier_labels[hand_sign_id]=="Gesture1":
+                    print("Gesture1 : slider Vertical")
+                    radio1.update(True)
+                    curRadio = 1
+                elif keypoint_classifier_labels[hand_sign_id]=="Gesture2":
+                    print("Gesture2 : slider Horizontal")
+                    radio2.update(True)
+                    curRadio = 2
+                elif keypoint_classifier_labels[hand_sign_id]=="Gesture3":
+                    print("Volume")
+                    radio3.update(True)
+                    curRadio = 3
+                elif keypoint_classifier_labels[hand_sign_id]=="Gesture4":
+                    print("Pointer")
+                    radio4.update(True)
+                    curRadio = 4
+
+
+                if curRadio == 1: # Move
+                    if keypoint_classifier_labels[hand_sign_id]=="Pointer":
+                        print("Move")
+                    
+                elif curRadio == 2: # Volume
+                    if keypoint_classifier_labels[hand_sign_id]=="Open":
+                        print("Volume")
+                    elif keypoint_classifier_labels[hand_sign_id]=="Close":
+                        print("Volume")
+
+                if curRadio == 3: # slider Vertical
+                    if keypoint_classifier_labels[hand_sign_id]=="Grab":
+                        print("slider Vertical")
+                        slider_v.update(50)
+                        h = int(values['-SLIDER_V-']) * 4
+                        graph.MoveFigure(line_h,0, h-svH)
+                        svH=h
+
+                elif curRadio == 4: # slider Horizontal
+                    if keypoint_classifier_labels[hand_sign_id]=="Grab":
+                        print("slider Horizontal")
+                        slider_h.update(50)
+                        v = int(values['-SLIDER_H-']) * 4
+                        graph.MoveFigure(line_v,v-svV, 0)
+                        svV=v
+
+
 
         debug_image = draw_info(debug_image, fps, mode, number)
 
@@ -298,5 +366,14 @@ def pre_process_landmark(landmark_list):
     temp_landmark_list = list(map(normalize_, temp_landmark_list))
 
     return temp_landmark_list
+
+def dotproduct(v1, v2):
+  return sum((a*b) for a, b in zip(v1, v2))
+
+def length(v):
+  return math.sqrt(dotproduct(v, v))
+
+def angle(v1, v2):
+  return math.acos(dotproduct(v1, v2) / (length(v1) * length(v2)))
 
 main()
