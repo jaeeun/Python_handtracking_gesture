@@ -39,6 +39,12 @@ def main():
 
 
     cap = cv.VideoCapture(0)
+    # 카메라 준비
+    cap.set(cv.CAP_PROP_FRAME_WIDTH, 960)
+    cap.set(cv.CAP_PROP_FRAME_HEIGHT, 720)
+    cap_width = cap.get(cv.CAP_PROP_FRAME_WIDTH)
+    cap_height = cap.get(cv.CAP_PROP_FRAME_HEIGHT)
+    print("cap size : "+str(cap_width)+"  "+str(cap_height))
     # ---===--- Get some Stats --- #
     fps = cap.get(cv.CAP_PROP_FPS)
 
@@ -46,7 +52,7 @@ def main():
 
     # ---===--- define the window layout --- #
     ui_column = [
-            [sg.Graph(canvas_size=(400, 400), graph_bottom_left=(0,0), graph_top_right=(400, 400), background_color='gray', key='graph'),sg.Slider(range=(0, 100), size=(20, 20), enable_events=True, orientation='v', key='-SLIDER_V-')],      
+            [sg.Graph(canvas_size=(800, 800), graph_bottom_left=(0,0), graph_top_right=(400, 400), background_color='gray', key='graph'),sg.Slider(range=(0, 100), size=(20, 20), enable_events=True, orientation='v', key='-SLIDER_V-')],      
             [sg.Slider(range=(0, 100), size=(50, 10), enable_events=True, orientation='h', key='-SLIDER_H-')],
             [sg.T('Test Buttons:'), sg.Button('Clock'), sg.Button('Move')],
             [sg.Radio(text="1 - Move", group_id=1, size=(30, 10), key='-RADIO1-')],
@@ -104,7 +110,10 @@ def main():
     bef=0
     nxt=1
 
-    moveList=[[50,50],[200,350],[100,300],[50,150],[300,300],[250,50]]
+    rot=0
+    hold=False
+
+    moveList=[[50,50],[200,750],[600,300],[50,550],[300,600],[650,50]]
     m = 0
 
     for i in range(0,12):
@@ -165,52 +174,78 @@ def main():
                         )
                 
                 v0 = [1,0]
-                v1 = [landmark_list[6][0]-landmark_list[5][0],landmark_list[6][1]-landmark_list[5][1]]
-                v2 = [landmark_list[10][0]-landmark_list[9][0],landmark_list[10][1]-landmark_list[9][1]]
+                v = [landmark_list[5][0]-landmark_list[17][0],landmark_list[5][1]-landmark_list[17][1]]
+                a1 = angle(v0,v)
                 
-                a1 = angle(v0,v1)
-                a2 = angle(v0,v2)
-                
-                a1=math.degrees(a1)-90
-                a2=math.degrees(a2)-90
-                aa = (a1+a2)/2
+                ang=math.degrees(a1)
+                print("angle : "+str)
 
-                print(a2)
-                # print(aa)
-                # if abs(aa)<15:
-                    
-                # elif aa<0:
-                    
-                # else:
 
                 # 1,2,3,4 표시
-                if keypoint_classifier_labels[hand_sign_id]=="Gesture1":
+                if keypoint_classifier_labels[hand_sign_id]=="Gesture1" or keypoint_classifier_labels[hand_sign_id]=="Pointer":
                     print("Gesture1 : slider Vertical")
                     radio1.update(True)
                     curRadio = 1
-                elif keypoint_classifier_labels[hand_sign_id]=="Gesture2":
+                elif keypoint_classifier_labels[hand_sign_id]=="Gesture2" or keypoint_classifier_labels[hand_sign_id]=="V":
                     print("Gesture2 : slider Horizontal")
                     radio2.update(True)
                     curRadio = 2
-                elif keypoint_classifier_labels[hand_sign_id]=="Gesture3":
+                elif keypoint_classifier_labels[hand_sign_id]=="Gesture3" or keypoint_classifier_labels[hand_sign_id]=="OK":
                     print("Volume")
                     radio3.update(True)
                     curRadio = 3
-                elif keypoint_classifier_labels[hand_sign_id]=="Gesture4":
+                elif keypoint_classifier_labels[hand_sign_id]=="Gesture4" or keypoint_classifier_labels[hand_sign_id]=="Thumb":
                     print("Pointer")
                     radio4.update(True)
                     curRadio = 4
 
 
+                # 제스처 컨트롤
                 if curRadio == 1: # Move
                     if keypoint_classifier_labels[hand_sign_id]=="Pointer":
                         print("Move")
+                        
+                        pointerX = landmark_list[8][0]
+                        pointerY = landmark_list[8][1]
+
+                        mx=pointerX-cx
+                        my=pointerY-cy
+                        print("cx:"+str(cx)+" xy:"+str(cy))
+                        graph.MoveFigure(circle, mx,my)
+                        for i in range(0,12):
+                            graph.MoveFigure(point[i], mx,my)
+                        
+                        cx=pointerX
+                        cy=pointerY
                     
                 elif curRadio == 2: # Volume
+                    # v0 = [1,0]
+                    # v = [landmark_list[5][0]-landmark_list[17][0],landmark_list[5][1]-landmark_list[17][1]]
+                    # a1 = angle(v0,v)
+                    
+                    # ang=math.degrees(a1)-90
+                    # print("angle : "+str)
+
+
+
+                    graph.TKCanvas.itemconfig(point[bef], fill = "yellow")
+                    graph.TKCanvas.itemconfig(point[nxt], fill = "red")
+                    bef+=1
+                    if bef>=12: bef=0
+                    nxt+=1
+                    if nxt>=12: nxt=0
+                    
                     if keypoint_classifier_labels[hand_sign_id]=="Open":
                         print("Volume")
+                        if hold:
+                            trot = rot
+
+                        hold = False
                     elif keypoint_classifier_labels[hand_sign_id]=="Close":
                         print("Volume")
+                        hold = True
+
+
 
                 if curRadio == 3: # slider Vertical
                     if keypoint_classifier_labels[hand_sign_id]=="Grab":
@@ -259,14 +294,17 @@ def main():
             if nxt>=12: nxt=0
         
         if event is '-SLIDER_H-':
-            v = int(values['-SLIDER_H-']) * 4
+            v = int(values['-SLIDER_H-']) * 8
             graph.MoveFigure(line_v,v-svV, 0)
             svV=v
 
         if event is '-SLIDER_V-':
-            h = int(values['-SLIDER_V-']) * 4
+            h = int(values['-SLIDER_V-']) * 8
             graph.MoveFigure(line_h,0, h-svH)
             svH=h
+
+
+
 
 
 def get_args():
