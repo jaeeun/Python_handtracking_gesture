@@ -178,7 +178,7 @@ def main():
                 a1 = angle(v0,v)
                 
                 ang=math.degrees(a1)
-                print("angle : "+str)
+                print("angle : "+str(ang))
 
 
                 # 1,2,3,4 표시
