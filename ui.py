@@ -1,4 +1,3 @@
-
 import csv
 import copy
 import argparse
@@ -11,6 +10,7 @@ import numpy as np
 import mediapipe as mp
 
 from model import KeyPointClassifier
+from lib_ui import *
 
 
 def main():
@@ -48,37 +48,8 @@ def main():
     # ---===--- Get some Stats --- #
     fps = cap.get(cv.CAP_PROP_FPS)
 
-    sg.theme('Black')
-
-    # ---===--- define the window layout --- #
-    ui_column = [
-            [sg.Graph(canvas_size=(800, 800), graph_bottom_left=(0,0), graph_top_right=(400, 400), background_color='gray', key='graph'),sg.Slider(range=(0, 100), size=(20, 20), enable_events=True, orientation='v', key='-SLIDER_V-')],      
-            [sg.Slider(range=(0, 100), size=(50, 10), enable_events=True, orientation='h', key='-SLIDER_H-')],
-            [sg.T('Test Buttons:'), sg.Button('Clock'), sg.Button('Move')],
-            [sg.Radio(text="1 - Move", group_id=1, size=(30, 10), key='-RADIO1-')],
-            [sg.Radio(text="2 - Volume", group_id=1, size=(30, 10), key='-RADIO2-')],
-            [sg.Radio(text="3 - Slider Vertical", group_id=1, size=(30, 10), key='-RADIO3-')],
-            [sg.Radio(text="4 - Slider Horizontal", group_id=1, size=(30, 10), key='-RADIO4-')],
-            [sg.Push(), sg.Button('Exit', font='Helvetica 14')]
-    ]
-
-    video_column = [
-            [sg.Text('Hand Demo', size=(15, 1), font='Helvetica 20')],
-              [sg.Image(key='-IMAGE-')]
-    ]
-
-    layout = [
-        [
-            sg.Column(ui_column),
-            sg.VSeperator(),
-            sg.Column(video_column),
-        ]
-    ]
+    window = DrawUI()
     
-
-    # create the window and show it without the plot
-    window = sg.Window('Demo Application - OpenCV Integration', layout, no_titlebar=False, location=(0, 0), finalize=True)
-
     # locate the elements we'll be updating. Does the search only 1 time
     image_elem = window['-IMAGE-']
     slider_v = window['-SLIDER_V-']
@@ -92,23 +63,22 @@ def main():
     radio1.update(True)
     curRadio = 1
 
-    svV = 200
-    svH = 200
+    svV = 400
+    svH = 400
 
     timeout = 1000//fps                 # time in ms to use for window reads
     
     graph = window['graph']
     circle = graph.DrawCircle((50,50), 50, fill_color='dark gray',line_color='black')
-    line_v = graph.DrawLine((200,0),(200,400),color='white')
-    line_h = graph.DrawLine((0,200),(400,200),color='red')
+    line_v = graph.DrawLine((350,0),(350,700),color='white')
+    line_h = graph.DrawLine((0,350),(700,350),color='red')
 
     cx=50
     cy=50
     point = []
     px=[50,73,88,95,88,73,50,27,12,5 ,12,27]
     py=[95,88,73,50,27,12,5 ,12,27,50,73,88]
-    bef=0
-    nxt=1
+    vol=0
 
     rot=0
     hold=False
@@ -173,44 +143,52 @@ def main():
                             keypoint_classifier_labels[hand_sign_id],
                         )
                 
-                v0 = [1,0]
-                v = [landmark_list[5][0]-landmark_list[17][0],landmark_list[5][1]-landmark_list[17][1]]
-                a1 = angle(v0,v)
                 
-                ang=math.degrees(a1)
-                print("angle : "+str(ang))
+                # v0 = [1,0]
+                # v = [landmark_list[5][0]-landmark_list[17][0],landmark_list[5][1]-landmark_list[17][1]]
+                # a1 = angle(v0,v)
+                
+                # ang=math.degrees(a1)
+                # print("angle : "+str(ang))
 
+
+
+
+                detect(hand_sign_id)
 
                 # 1,2,3,4 표시
                 if keypoint_classifier_labels[hand_sign_id]=="Gesture1" or keypoint_classifier_labels[hand_sign_id]=="Pointer":
-                    print("Gesture1 : slider Vertical")
-                    radio1.update(True)
-                    curRadio = 1
+                    if detectCount[hand_sign_id]>3:
+                        radio1.update(True)
+                        curRadio = 1
                 elif keypoint_classifier_labels[hand_sign_id]=="Gesture2" or keypoint_classifier_labels[hand_sign_id]=="V":
-                    print("Gesture2 : slider Horizontal")
-                    radio2.update(True)
-                    curRadio = 2
+                    if detectCount[hand_sign_id]>3:
+                        radio2.update(True)
+                        curRadio = 2
                 elif keypoint_classifier_labels[hand_sign_id]=="Gesture3" or keypoint_classifier_labels[hand_sign_id]=="OK":
-                    print("Volume")
-                    radio3.update(True)
-                    curRadio = 3
+                    if detectCount[hand_sign_id]>3:
+                        radio3.update(True)
+                        curRadio = 3
                 elif keypoint_classifier_labels[hand_sign_id]=="Gesture4" or keypoint_classifier_labels[hand_sign_id]=="Thumb":
-                    print("Pointer")
-                    radio4.update(True)
-                    curRadio = 4
+                    if detectCount[hand_sign_id]>3:
+                        radio4.update(True)
+                        curRadio = 4
 
+                debug_image = draw_Gesture(debug_image,curRadio, "number "+str(curRadio))
 
                 # 제스처 컨트롤
                 if curRadio == 1: # Move
                     if keypoint_classifier_labels[hand_sign_id]=="Pointer":
-                        print("Move")
+                        # print("Move")
+
+                        print("landmark x:"+str(landmark_list[8][0])+" y:"+str(landmark_list[8][1]))
                         
                         pointerX = landmark_list[8][0]
-                        pointerY = landmark_list[8][1]
+                        pointerY = cap_height - landmark_list[8][1]
 
                         mx=pointerX-cx
                         my=pointerY-cy
-                        print("cx:"+str(cx)+" xy:"+str(cy))
+                        # print("cx:"+str(cx)+" cy:"+str(cy))
                         graph.MoveFigure(circle, mx,my)
                         for i in range(0,12):
                             graph.MoveFigure(point[i], mx,my)
@@ -223,43 +201,35 @@ def main():
                     # v = [landmark_list[5][0]-landmark_list[17][0],landmark_list[5][1]-landmark_list[17][1]]
                     # a1 = angle(v0,v)
                     
-                    # ang=math.degrees(a1)-90
-                    # print("angle : "+str)
-
-
-
-                    graph.TKCanvas.itemconfig(point[bef], fill = "yellow")
-                    graph.TKCanvas.itemconfig(point[nxt], fill = "red")
-                    bef+=1
-                    if bef>=12: bef=0
-                    nxt+=1
-                    if nxt>=12: nxt=0
+                    # ang=math.degrees(a1)
+                    # print("angle : "+str(ang))
                     
                     if keypoint_classifier_labels[hand_sign_id]=="Open":
                         print("Volume")
-                        if hold:
-                            trot = rot
-
-                        hold = False
+                        tempVol = vol
                     elif keypoint_classifier_labels[hand_sign_id]=="Close":
                         print("Volume")
-                        hold = True
+                        tempVol = RotateVolume(graph, point, vol, tempVol, 45)
 
 
 
                 if curRadio == 3: # slider Vertical
                     if keypoint_classifier_labels[hand_sign_id]=="Grab":
                         print("slider Vertical")
-                        slider_v.update(50)
-                        h = int(values['-SLIDER_V-']) * 4
+                        percent = 100 - (landmark_list[8][1]-100) / (cap_height-200) * 100
+                        # print("vert landmark_list[8][1] : "+str(landmark_list[8][1])+"  percent : "+str(percent))
+                        slider_v.update(percent)
+                        h = int(values['-SLIDER_V-']) * 7
                         graph.MoveFigure(line_h,0, h-svH)
                         svH=h
 
                 elif curRadio == 4: # slider Horizontal
                     if keypoint_classifier_labels[hand_sign_id]=="Grab":
                         print("slider Horizontal")
-                        slider_h.update(50)
-                        v = int(values['-SLIDER_H-']) * 4
+                        percent = (landmark_list[8][0]-100) / (cap_width-200) * 100
+                        # print("hori landmark_list[8][0] : "+str(landmark_list[8][0])+"  percent : "+str(percent))
+                        slider_h.update(percent)
+                        v = int(values['-SLIDER_H-']) * 7
                         graph.MoveFigure(line_v,v-svV, 0)
                         svV=v
 
@@ -286,132 +256,23 @@ def main():
             cy=moveList[m][1]
 
         if event is 'Clock':
-            graph.TKCanvas.itemconfig(point[bef], fill = "yellow")
-            graph.TKCanvas.itemconfig(point[nxt], fill = "red")
-            bef+=1
-            if bef>=12: bef=0
-            nxt+=1
-            if nxt>=12: nxt=0
+            graph.TKCanvas.itemconfig(point[vol], fill = "yellow")
+            vol+=1
+            if vol>=12: vol=0
+            graph.TKCanvas.itemconfig(point[vol], fill = "red")
+            
         
         if event is '-SLIDER_H-':
-            v = int(values['-SLIDER_H-']) * 8
+            v = int(values['-SLIDER_H-']) * 7
             graph.MoveFigure(line_v,v-svV, 0)
             svV=v
 
         if event is '-SLIDER_V-':
-            h = int(values['-SLIDER_V-']) * 8
+            h = int(values['-SLIDER_V-']) * 7
             graph.MoveFigure(line_h,0, h-svH)
             svH=h
 
 
 
-
-
-def get_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", type=int, default=0)
-    parser.add_argument("--number", type=int, default=0)
-    args = parser.parse_args()
-
-    return args
-
-def calc_bounding_rect(image, landmarks):
-    image_width, image_height = image.shape[1], image.shape[0]
-
-    landmark_array = np.empty((0, 2), int)
-
-    for _, landmark in enumerate(landmarks.landmark):
-        landmark_x = min(int(landmark.x * image_width), image_width - 1)
-        landmark_y = min(int(landmark.y * image_height), image_height - 1)
-
-        landmark_point = [np.array((landmark_x, landmark_y))]
-
-        landmark_array = np.append(landmark_array, landmark_point, axis=0)
-
-    x, y, w, h = cv.boundingRect(landmark_array)
-
-    return [x, y, x + w, y + h]
-
-def calc_landmark_list(image, landmarks):
-    image_width, image_height = image.shape[1], image.shape[0]
-
-    landmark_point = []
-    landmark_3dpoint = []
-
-    # 키 포인트
-    for _, landmark in enumerate(landmarks.landmark):
-        landmark_x = min(int(landmark.x * image_width), image_width - 1)
-        landmark_y = min(int(landmark.y * image_height), image_height - 1)
-        landmark_z = landmark.z * image_height
-
-        landmark_point.append([landmark_x, landmark_y])
-        landmark_3dpoint.append([landmark_x, landmark_y, landmark_z])
-
-    return landmark_point,landmark_3dpoint
-
-
-def draw_info(image, fps, mode, number):
-    cv.putText(image, "FPS:" + str(fps), (10, 30), cv.FONT_HERSHEY_SIMPLEX,
-               0.8, (0, 0, 0), 4, cv.LINE_AA)
-    cv.putText(image, "FPS:" + str(fps), (10, 30), cv.FONT_HERSHEY_SIMPLEX,
-               0.8, (255, 255, 255), 2, cv.LINE_AA)
-
-    mode_string = ['Logging Key Point', 'Logging Point History']
-    if 0 <= mode <= 2:
-        cv.putText(image, "MODE:" + mode_string[mode - 1], (10, 90),
-                   cv.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1,
-                   cv.LINE_AA)
-        if 0 <= number <= 9:
-            cv.putText(image, "NUM:" + str(number), (10, 110),
-                       cv.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1,
-                       cv.LINE_AA)
-    return image
-
-def draw_info_text(image, brect, handedness, hand_sign_text):
-    cv.rectangle(image, (brect[0], brect[1]), (brect[2], brect[1] - 22),
-                 (0, 0, 0), -1)
-
-    info_text = handedness.classification[0].label[0:]
-    if hand_sign_text != "":
-        info_text = info_text + ':' + hand_sign_text
-    cv.putText(image, info_text, (brect[0] + 5, brect[1] - 4),
-               cv.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv.LINE_AA)
-
-    return image
-
-def pre_process_landmark(landmark_list):
-    temp_landmark_list = copy.deepcopy(landmark_list)
-
-    # 상대 좌표로 변환
-    base_x, base_y = 0, 0
-    for index, landmark_point in enumerate(temp_landmark_list):
-        if index == 0:
-            base_x, base_y = landmark_point[0], landmark_point[1]
-
-        temp_landmark_list[index][0] = temp_landmark_list[index][0] - base_x
-        temp_landmark_list[index][1] = temp_landmark_list[index][1] - base_y
-
-    # 1次元リストに変換
-    temp_landmark_list = list(
-        itertools.chain.from_iterable(temp_landmark_list))
-
-    # 正規化
-    max_value = max(list(map(abs, temp_landmark_list)))
-
-    def normalize_(n):
-        return n / max_value
-
-    temp_landmark_list = list(map(normalize_, temp_landmark_list))
-
-    return temp_landmark_list
-
-def dotproduct(v1, v2):
-  return sum((a*b) for a, b in zip(v1, v2))
-
-def length(v):
-  return math.sqrt(dotproduct(v, v))
-
-def angle(v1, v2):
-  return math.acos(dotproduct(v1, v2) / (length(v1) * length(v2)))
 
 main()
