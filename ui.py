@@ -105,15 +105,8 @@ def main():
         ret, image = cap.read()
         if not ret:  # if out of data stop looping
             break
-        # if someone moved the slider manually, the jump to that frame
-        # if int(values['-SLIDER_V-']) != cur_frame-1:
-        #     cur_frame = int(values['-SLIDER_V-'])
-        #     vidFile.set(cv.CAP_PROP_POS_FRAMES, cur_frame)
-        # slider_v.update(cur_frame)
-        # cur_frame += 1
-
-
-        image = cv.flip(image, 1)  # ミラー表示
+        
+        image = cv.flip(image, 1)
         debug_image = copy.deepcopy(image)
 
         # 검출 #############################################################
@@ -144,74 +137,78 @@ def main():
                         )
                 
                 
-                # v0 = [1,0]
-                # v = [landmark_list[5][0]-landmark_list[17][0],landmark_list[5][1]-landmark_list[17][1]]
+                # v0 = [0,1]
+                # v = [landmark_list[5][0]-landmark_list[13][0],landmark_list[5][1]-landmark_list[13][1]]
                 # a1 = angle(v0,v)
                 
                 # ang=math.degrees(a1)
                 # print("angle : "+str(ang))
-
-
+                # debug_image = draw_temp(debug_image,"angle : "+str(ang))
 
 
                 detect(hand_sign_id)
 
                 # 1,2,3,4 표시
                 if keypoint_classifier_labels[hand_sign_id]=="Gesture1" or keypoint_classifier_labels[hand_sign_id]=="Pointer":
-                    if detectCount[hand_sign_id]>3:
+                    if detectCount[hand_sign_id]>3 and curRadio!=1:
                         radio1.update(True)
                         curRadio = 1
                 elif keypoint_classifier_labels[hand_sign_id]=="Gesture2" or keypoint_classifier_labels[hand_sign_id]=="V":
-                    if detectCount[hand_sign_id]>3:
+                    if detectCount[hand_sign_id]>3 and curRadio!=2:
                         radio2.update(True)
                         curRadio = 2
+                        
                 elif keypoint_classifier_labels[hand_sign_id]=="Gesture3" or keypoint_classifier_labels[hand_sign_id]=="OK":
-                    if detectCount[hand_sign_id]>3:
+                    if detectCount[hand_sign_id]>3 and curRadio!=3:
                         radio3.update(True)
                         curRadio = 3
                 elif keypoint_classifier_labels[hand_sign_id]=="Gesture4" or keypoint_classifier_labels[hand_sign_id]=="Thumb":
-                    if detectCount[hand_sign_id]>3:
+                    if detectCount[hand_sign_id]>3 and curRadio!=4:
                         radio4.update(True)
                         curRadio = 4
 
                 debug_image = draw_Gesture(debug_image,curRadio, "number "+str(curRadio))
+                
 
                 # 제스처 컨트롤
                 if curRadio == 1: # Move
-                    if keypoint_classifier_labels[hand_sign_id]=="Pointer":
-                        # print("Move")
+                    print("landmark x:"+str(landmark_list[8][0])+" y:"+str(landmark_list[8][1]))
+                    
+                    pointerX = landmark_list[8][0]
+                    pointerY = cap_height - landmark_list[8][1]
 
-                        print("landmark x:"+str(landmark_list[8][0])+" y:"+str(landmark_list[8][1]))
-                        
-                        pointerX = landmark_list[8][0]
-                        pointerY = cap_height - landmark_list[8][1]
-
-                        mx=pointerX-cx
-                        my=pointerY-cy
-                        # print("cx:"+str(cx)+" cy:"+str(cy))
-                        graph.MoveFigure(circle, mx,my)
-                        for i in range(0,12):
-                            graph.MoveFigure(point[i], mx,my)
-                        
-                        cx=pointerX
-                        cy=pointerY
+                    mx=pointerX-cx
+                    my=pointerY-cy
+                    # print("cx:"+str(cx)+" cy:"+str(cy))
+                    graph.MoveFigure(circle, mx,my)
+                    for i in range(0,12):
+                        graph.MoveFigure(point[i], mx,my)
+                    
+                    cx=pointerX
+                    cy=pointerY
                     
                 elif curRadio == 2: # Volume
-                    # v0 = [1,0]
-                    # v = [landmark_list[5][0]-landmark_list[17][0],landmark_list[5][1]-landmark_list[17][1]]
-                    # a1 = angle(v0,v)
+                    v0 = [0,1]
+                    v = [landmark_list[5][0]-landmark_list[13][0],landmark_list[5][1]-landmark_list[13][1]]
+                    a1 = angle(v0,v)
                     
-                    # ang=math.degrees(a1)
-                    # print("angle : "+str(ang))
+                    ang=math.degrees(a1)
+
+                    # 화면에 각도 보여주고 있어서 필요없으면 지워야함
+                    debug_image = draw_temp(debug_image,"angle : "+str(ang))
                     
-                    if keypoint_classifier_labels[hand_sign_id]=="Open":
-                        print("Volume")
-                        tempVol = vol
-                    elif keypoint_classifier_labels[hand_sign_id]=="Close":
-                        print("Volume")
-                        tempVol = RotateVolume(graph, point, vol, tempVol, 45)
+                    if ang>110:
+                        graph.TKCanvas.itemconfig(point[vol], fill = "yellow")
+                        vol+=1
+                        if vol>=12: vol=0
+                        graph.TKCanvas.itemconfig(point[vol], fill = "red")
+                    elif ang<70:
+                        graph.TKCanvas.itemconfig(point[vol], fill = "yellow")
+                        vol-=1
+                        if vol<0: vol=11
+                        graph.TKCanvas.itemconfig(point[vol], fill = "red")
 
-
+                    
 
                 if curRadio == 3: # slider Vertical
                     if keypoint_classifier_labels[hand_sign_id]=="Grab":

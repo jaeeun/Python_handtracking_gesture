@@ -140,12 +140,15 @@ def draw_info_text(image, brect, handedness, hand_sign_text):
     return image
 
 def draw_Gesture(image, num, gesture):
-    info_text = str(num) + " - " + str(gesture)
+    info_text = str(num) + " - " + gesture
     cv.putText(image, info_text, (300, 300),
                cv.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3, cv.LINE_AA)
 
     return image
 
+def draw_temp(image, st):
+    cv.putText(image, st, (100, 500), cv.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 1, cv.LINE_AA)
+    return image
 
 def pre_process_landmark(landmark_list):
     temp_landmark_list = copy.deepcopy(landmark_list)
